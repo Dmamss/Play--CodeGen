@@ -91,10 +91,58 @@ CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
 {
 #ifdef __APPLE__
-	const char* hasTxm = getenv("PLAY_HAS_TXM");
-	m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
-#endif
+    const char* hasTxm = getenv("PLAY_HAS_TXM");
+    m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
+    
+    if(m_ios26TxmMode)
+    {
+        vm_size_t page_size = 0;
+        host_page_size(mach_task_self(), &page_size);
+        size_t allocSize = ((size + page_size - 1) / page_size) * page_size;
 
+        void* rx = BreakGetJITMapping(nullptr, allocSize);
+        
+        if(rx != nullptr)
+        {
+            vm_address_t rwAddress = 0;
+            vm_prot_t curProt = VM_PROT_NONE;
+            vm_prot_t maxProt = VM_PROT_NONE;
+            
+            kern_return_t kr = vm_remap(
+                mach_task_self(),
+                &rwAddress,
+                allocSize,
+                0,
+                VM_FLAGS_ANYWHERE,
+                mach_task_self(),
+                (vm_address_t)rx,
+                FALSE,
+                &curProt,
+                &maxProt,
+                VM_INHERIT_NONE
+            );
+            
+            if(kr == KERN_SUCCESS)
+            {
+                vm_protect(mach_task_self(), rwAddress, allocSize, 
+                          FALSE, VM_PROT_READ | VM_PROT_WRITE);
+
+                memcpy((void*)rwAddress, code, size);
+                
+                vm_deallocate(mach_task_self(), rwAddress, allocSize);
+                
+                m_code = rx;
+                m_size = allocSize;
+                ClearCache();
+                return;
+            }
+        }
+        
+      
+        m_ios26TxmMode = false;
+    }
+#endif
+  
 #if defined(MEMFUNC_USE_WIN32)
 	m_size = size;
 	m_code = framework_aligned_alloc(size, BLOCK_ALIGN);
