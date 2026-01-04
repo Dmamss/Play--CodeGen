@@ -47,4 +47,3 @@ private:
 #if defined(__EMSCRIPTEN__)
 	emscripten::val m_wasmModule;
 #endif
-};
