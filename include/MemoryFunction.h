@@ -32,18 +32,19 @@ public:
 	CMemoryFunction CreateInstance();
 
 private:
-	void ClearCache();
-	void Reset();
-
-	void* m_code;
-	size_t m_size;
-
+    void ClearCache();
+    void Reset();
+    
+    void* m_code;
+    size_t m_size;
+    
 #ifdef __APPLE__
-	bool   m_ios26TxmMode = false;
-	void*  m_rxMemory = nullptr;
-	void*  m_rwAliasMemory = nullptr;
+    bool m_ios26TxmMode = false;
+    void* m_rxMemory = nullptr;
+    void* m_rwAliasMemory = nullptr;
 #endif
 
 #if defined(__EMSCRIPTEN__)
-	emscripten::val m_wasmModule;
+    emscripten::val m_wasmModule;
 #endif
+};
