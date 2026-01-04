@@ -89,7 +89,33 @@ CMemoryFunction::CMemoryFunction()
 
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
-{
+{ #ifdef __APPLE__
+	const char* hasTxm = getenv("PLAY_HAS_TXM");
+	m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
+
+	if(m_ios26TxmMode)
+	{
+		void* rx = nullptr;
+		void* rw = nullptr;
+		size_t jitSize = 0;
+
+		int result = BreakCreateJITMapping(size, &rx, &rw, &jitSize);
+		assert(result == 0);
+		assert(rx != nullptr);
+		assert(rw != nullptr);
+		assert(jitSize >= size);
+
+		memcpy(rw, code, size);
+
+		m_rxMemory = rx;
+		m_rwAliasMemory = rw;
+		m_code = rx;
+		m_size = jitSize;
+
+		ClearCache();
+		return;
+	}
+#endif
 #if defined(MEMFUNC_USE_WIN32)
 	m_size = size;
 	m_code = framework_aligned_alloc(size, BLOCK_ALIGN);
