@@ -13,21 +13,30 @@
 #ifdef _WIN32
 	#define MEMFUNC_USE_WIN32
 #elif defined(__APPLE__)
-	#include "TargetConditionals.h"
-	#include <libkern/OSCacheControl.h>
+#include "TargetConditionals.h"
+#include <libkern/OSCacheControl.h>
+#include <mach/mach_init.h>
+#include <mach/vm_map.h>
 
-	#if TARGET_OS_OSX
-		#define MEMFUNC_USE_MMAP
-		#define MEMFUNC_MMAP_ADDITIONAL_FLAGS (MAP_JIT)
-		#if TARGET_CPU_ARM64
-			#define MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT
-		#endif
-	#else
-		#define MEMFUNC_USE_MACHVM
-		#if TARGET_OS_IPHONE
-			#define MEMFUNC_MACHVM_STRICT_PROTECTION
-		#endif
-	#endif
+// BreakpointJIT pour iOS 26 TXM
+#if TARGET_OS_IPHONE
+extern "C" {
+    void* BreakGetJITMapping(void* addr, size_t len) __attribute__((weak_import));
+}
+#endif
+
+#if TARGET_OS_OSX
+#define MEMFUNC_USE_MMAP
+#define MEMFUNC_MMAP_ADDITIONAL_FLAGS (MAP_JIT)
+#if TARGET_CPU_ARM64
+#define MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT
+#endif
+#else
+#define MEMFUNC_USE_MACHVM
+#if TARGET_OS_IPHONE
+#define MEMFUNC_MACHVM_STRICT_PROTECTION
+#endif
+#endif
 #elif defined(__EMSCRIPTEN__)
 	#include <emscripten.h>
 	#define MEMFUNC_USE_WASM
@@ -90,20 +99,30 @@ CMemoryFunction::CMemoryFunction()
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
 {
+CMemoryFunction::CMemoryFunction(const void* code, size_t size)
+: m_code(nullptr)
+, m_size(0)
+{
 #ifdef __APPLE__
+    // Détecter mode TXM iOS 26
     const char* hasTxm = getenv("PLAY_HAS_TXM");
     m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
     
-    if(m_ios26TxmMode)
+#if TARGET_OS_IPHONE
+    if(m_ios26TxmMode && BreakGetJITMapping != nullptr)
     {
+        // Calculer taille alignée sur page
         vm_size_t page_size = 0;
         host_page_size(mach_task_self(), &page_size);
+        if(page_size == 0) page_size = 16384; // Fallback ARM64
         size_t allocSize = ((size + page_size - 1) / page_size) * page_size;
-
+        
+        // Obtenir mémoire RX via BreakpointJIT
         void* rx = BreakGetJITMapping(nullptr, allocSize);
         
         if(rx != nullptr)
         {
+            // Créer alias RW temporaire via vm_remap
             vm_address_t rwAddress = 0;
             vm_prot_t curProt = VM_PROT_NONE;
             vm_prot_t maxProt = VM_PROT_NONE;
@@ -124,24 +143,46 @@ CMemoryFunction::CMemoryFunction(const void* code, size_t size)
             
             if(kr == KERN_SUCCESS)
             {
-                vm_protect(mach_task_self(), rwAddress, allocSize, 
-                          FALSE, VM_PROT_READ | VM_PROT_WRITE);
-
-                memcpy((void*)rwAddress, code, size);
+                // Rendre l'alias writable
+                kern_return_t protResult = vm_protect(
+                    mach_task_self(), 
+                    rwAddress, 
+                    allocSize, 
+                    FALSE, 
+                    VM_PROT_READ | VM_PROT_WRITE
+                );
                 
+                if(protResult == KERN_SUCCESS)
+                {
+                    // Copier le code JIT dans l'alias RW
+                    memcpy((void*)rwAddress, code, size);
+                    
+                    // Libérer l'alias RW (on garde seulement RX)
+                    vm_deallocate(mach_task_self(), rwAddress, allocSize);
+                    
+                    // Stocker le pointeur RX pour exécution
+                    m_code = rx;
+                    m_rxMemory = rx;
+                    m_size = allocSize;
+                    ClearCache();
+                    return; // Succès - ne pas exécuter le code legacy
+                }
+                
+                // Échec vm_protect - cleanup
                 vm_deallocate(mach_task_self(), rwAddress, allocSize);
-                
-                m_code = rx;
-                m_size = allocSize;
-                ClearCache();
-                return;
             }
+            
+            // Échec vm_remap - la mémoire RX reste allouée par BreakpointJIT
+            // On ne peut pas la libérer, mais on peut réessayer en mode legacy
         }
         
-      
+        // Échec BreakpointJIT - désactiver TXM mode
         m_ios26TxmMode = false;
     }
-#endif
+#endif // TARGET_OS_IPHONE
+#endif // __APPLE__
+
+    // ========== CODE LEGACY  ==========
   
 #if defined(MEMFUNC_USE_WIN32)
 	m_size = size;
