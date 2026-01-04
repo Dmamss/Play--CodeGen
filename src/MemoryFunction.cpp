@@ -90,6 +90,11 @@ CMemoryFunction::CMemoryFunction()
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
 {
+#ifdef __APPLE__
+	const char* hasTxm = getenv("PLAY_HAS_TXM");
+	m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
+#endif
+
 #if defined(MEMFUNC_USE_WIN32)
 	m_size = size;
 	m_code = framework_aligned_alloc(size, BLOCK_ALIGN);
