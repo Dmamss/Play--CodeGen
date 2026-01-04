@@ -159,18 +159,39 @@ void CMemoryFunction::Reset()
 {
 	if(m_code != nullptr)
 	{
+#ifdef __APPLE__
+		if(m_ios26TxmMode)
+		{
+			if(m_rxMemory != nullptr || m_rwAliasMemory != nullptr)
+			{
+				BreakDestroyJITMapping(m_rxMemory, m_rwAliasMemory, m_size);
+			}
+			m_rxMemory = nullptr;
+			m_rwAliasMemory = nullptr;
+			m_code = nullptr;
+			m_size = 0;
+			return;
+		}
+#endif
+
 #if defined(MEMFUNC_USE_WIN32)
 		framework_aligned_free(m_code);
 #elif defined(MEMFUNC_USE_MACHVM)
-		vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(m_code), m_size);
+		vm_deallocate(
+			mach_task_self(),
+			reinterpret_cast<vm_address_t>(m_code),
+			m_size
+		);
 #elif defined(MEMFUNC_USE_MMAP)
 		munmap(m_code, m_size);
 #elif defined(MEMFUNC_USE_WASM)
 		WasmDeleteFunction(reinterpret_cast<int>(m_code));
 #endif
 	}
+
 	m_code = nullptr;
 	m_size = 0;
+
 #if defined(MEMFUNC_USE_WASM)
 	m_wasmModule = emscripten::val();
 #endif
