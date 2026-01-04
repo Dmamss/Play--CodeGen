@@ -37,6 +37,13 @@ private:
 
 	void* m_code;
 	size_t m_size;
+
+#ifdef __APPLE__
+	bool   m_ios26TxmMode = false;
+	void*  m_rxMemory = nullptr;      // RX (exécution)
+	void*  m_rwAliasMemory = nullptr; // RW (écriture)
+#endif
+
 #if defined(__EMSCRIPTEN__)
 	emscripten::val m_wasmModule;
 #endif
