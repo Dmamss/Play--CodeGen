@@ -217,23 +217,51 @@ size_t CMemoryFunction::GetSize() const
 void CMemoryFunction::BeginModify()
 {
 #if defined(MEMFUNC_USE_MACHVM) && defined(MEMFUNC_MACHVM_STRICT_PROTECTION)
-	kern_return_t result = vm_protect(mach_task_self(), reinterpret_cast<vm_address_t>(m_code), m_size, 0, VM_PROT_READ | VM_PROT_WRITE);
-	assert(result == 0);
+#ifdef __APPLE__
+	if(!m_ios26TxmMode)
+	{
+#endif
+		kern_return_t result = vm_protect(
+			mach_task_self(),
+			reinterpret_cast<vm_address_t>(m_code),
+			m_size,
+			0,
+			VM_PROT_READ | VM_PROT_WRITE
+		);
+		assert(result == 0);
+#ifdef __APPLE__
+	}
+#endif
 #elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
 	pthread_jit_write_protect_np(false);
 #endif
 }
 
+
 void CMemoryFunction::EndModify()
 {
 #if defined(MEMFUNC_USE_MACHVM) && defined(MEMFUNC_MACHVM_STRICT_PROTECTION)
-	kern_return_t result = vm_protect(mach_task_self(), reinterpret_cast<vm_address_t>(m_code), m_size, 0, VM_PROT_READ | VM_PROT_EXECUTE);
-	assert(result == 0);
+#ifdef __APPLE__
+	if(!m_ios26TxmMode)
+	{
+#endif
+		kern_return_t result = vm_protect(
+			mach_task_self(),
+			reinterpret_cast<vm_address_t>(m_code),
+			m_size,
+			0,
+			VM_PROT_READ | VM_PROT_EXECUTE
+		);
+		assert(result == 0);
+#ifdef __APPLE__
+	}
+#endif
 #elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
 	pthread_jit_write_protect_np(true);
 #endif
 	ClearCache();
 }
+
 
 CMemoryFunction CMemoryFunction::CreateInstance()
 {
