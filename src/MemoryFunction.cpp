@@ -15,8 +15,9 @@
 #elif defined(__APPLE__)
 	#include "TargetConditionals.h"
 	#include <libkern/OSCacheControl.h>
-
-	#if TARGET_OS_OSX
+    #include <BreakpointJIT/BreakpointJIT.h>
+	
+#if TARGET_OS_OSX
 		#define MEMFUNC_USE_MMAP
 		#define MEMFUNC_MMAP_ADDITIONAL_FLAGS (MAP_JIT)
 		#if TARGET_CPU_ARM64
@@ -90,10 +91,26 @@ CMemoryFunction::CMemoryFunction()
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
 {
+#ifdef __APPLE__
+	const char* hasTxm = getenv("PLAY_HAS_TXM");
+	m_ios26TxmMode = (hasTxm != nullptr) && (hasTxm[0] == '1');
+
+	if(m_ios26TxmMode)
+	{
+		void* rx = nullptr;
+		size_t rxSize = 0;
+		int result = BreakGetJITMapping(&rx, &rxSize);
+		assert(result == 0);
+		assert(rx != nullptr);
+		assert(rxSize >= size);
+	}
+#endif
+
 #if defined(MEMFUNC_USE_WIN32)
 	m_size = size;
 	m_code = framework_aligned_alloc(size, BLOCK_ALIGN);
 	memcpy(m_code, code, size);
+
 	
 	DWORD oldProtect = 0;
 	BOOL result = VirtualProtect(m_code, size, PAGE_EXECUTE_READWRITE, &oldProtect);
