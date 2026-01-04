@@ -251,22 +251,37 @@ void CMemoryFunction::ClearCache()
 
 void CMemoryFunction::Reset()
 {
-	if(m_code != nullptr)
-	{
-#if defined(MEMFUNC_USE_WIN32)
-		framework_aligned_free(m_code);
-#elif defined(MEMFUNC_USE_MACHVM)
-		vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(m_code), m_size);
-#elif defined(MEMFUNC_USE_MMAP)
-		munmap(m_code, m_size);
-#elif defined(MEMFUNC_USE_WASM)
-		WasmDeleteFunction(reinterpret_cast<int>(m_code));
+    if(m_code != nullptr)
+    {
+#ifdef __APPLE__
+#if TARGET_OS_IPHONE
+        if(m_ios26TxmMode)
+        {
+            m_rxMemory = nullptr;
+            m_rwAliasMemory = nullptr;
+            m_code = nullptr;
+            m_size = 0;
+            return;
+        }
 #endif
-	}
-	m_code = nullptr;
-	m_size = 0;
+#endif
+
+#if defined(MEMFUNC_USE_WIN32)
+        framework_aligned_free(m_code);
+#elif defined(MEMFUNC_USE_MACHVM)
+        vm_deallocate(mach_task_self(), reinterpret_cast<vm_address_t>(m_code), m_size);
+#elif defined(MEMFUNC_USE_MMAP)
+        munmap(m_code, m_size);
+#elif defined(MEMFUNC_USE_WASM)
+        WasmDeleteFunction(reinterpret_cast<int>(m_code));
+#endif
+    }
+    
+    m_code = nullptr;
+    m_size = 0;
+    
 #if defined(MEMFUNC_USE_WASM)
-	m_wasmModule = emscripten::val();
+    m_wasmModule = emscripten::val();
 #endif
 }
 
@@ -307,20 +322,24 @@ void CMemoryFunction::BeginModify()
 {
 #if defined(MEMFUNC_USE_MACHVM) && defined(MEMFUNC_MACHVM_STRICT_PROTECTION)
 #ifdef __APPLE__
-	if(!m_ios26TxmMode)
-	{
+   
+    if(m_ios26TxmMode)
+    {
+        return;
+    }
 #endif
-		kern_return_t result = vm_protect(
-			mach_task_self(),
-			reinterpret_cast<vm_address_t>(m_code),
-			m_size,
-			0,
-			VM_PROT_READ | VM_PROT_WRITE
-		);
-		assert(result == 0);
-#ifdef __APPLE__
-	}
+    kern_return_t result = vm_protect(
+        mach_task_self(),
+        reinterpret_cast<vm_address_t>(m_code),
+        m_size,
+        0,
+        VM_PROT_READ | VM_PROT_WRITE
+    );
+    assert(result == 0);
+#elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
+    pthread_jit_write_protect_np(false);
 #endif
+}
 #elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
 	pthread_jit_write_protect_np(false);
 #endif
@@ -331,20 +350,26 @@ void CMemoryFunction::EndModify()
 {
 #if defined(MEMFUNC_USE_MACHVM) && defined(MEMFUNC_MACHVM_STRICT_PROTECTION)
 #ifdef __APPLE__
-	if(!m_ios26TxmMode)
-	{
+    // En mode TXM, la mémoire est déjà RX
+    if(m_ios26TxmMode)
+    {
+        ClearCache();
+        return;
+    }
 #endif
-		kern_return_t result = vm_protect(
-			mach_task_self(),
-			reinterpret_cast<vm_address_t>(m_code),
-			m_size,
-			0,
-			VM_PROT_READ | VM_PROT_EXECUTE
-		);
-		assert(result == 0);
-#ifdef __APPLE__
-	}
+    kern_return_t result = vm_protect(
+        mach_task_self(),
+        reinterpret_cast<vm_address_t>(m_code),
+        m_size,
+        0,
+        VM_PROT_READ | VM_PROT_EXECUTE
+    );
+    assert(result == 0);
+#elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
+    pthread_jit_write_protect_np(true);
 #endif
+    ClearCache();
+}
 #elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
 	pthread_jit_write_protect_np(true);
 #endif
