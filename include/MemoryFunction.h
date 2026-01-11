@@ -41,7 +41,6 @@ private:
 #ifdef __APPLE__
     bool m_ios26TxmMode = false;
     void* m_rxMemory = nullptr;
-    void* m_rwAliasMemory = nullptr;
 #endif
 
 #if defined(__EMSCRIPTEN__)
