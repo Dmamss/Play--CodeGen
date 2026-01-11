@@ -98,9 +98,6 @@ CMemoryFunction::CMemoryFunction()
 
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
-{
-CMemoryFunction::CMemoryFunction(const void* code, size_t size)
-: m_code(nullptr)
 , m_size(0)
 {
 #ifdef __APPLE__
@@ -340,10 +337,6 @@ void CMemoryFunction::BeginModify()
     pthread_jit_write_protect_np(false);
 #endif
 }
-#elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
-	pthread_jit_write_protect_np(false);
-#endif
-}
 
 
 void CMemoryFunction::EndModify()
@@ -369,11 +362,6 @@ void CMemoryFunction::EndModify()
     pthread_jit_write_protect_np(true);
 #endif
     ClearCache();
-}
-#elif defined(MEMFUNC_USE_MMAP) && defined(MEMFUNC_MMAP_REQUIRES_JIT_WRITE_PROTECT)
-	pthread_jit_write_protect_np(true);
-#endif
-	ClearCache();
 }
 
 
