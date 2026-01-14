@@ -96,6 +96,21 @@ CMemoryFunction::CMemoryFunction()
 
 }
 
+CMemoryFunction::CMemoryFunction(CMemoryFunction&& rhs)
+: m_code(nullptr)
+, m_size(0)
+{
+	std::swap(m_code, rhs.m_code);
+	std::swap(m_size, rhs.m_size);
+#ifdef __APPLE__
+	std::swap(m_ios26TxmMode, rhs.m_ios26TxmMode);
+	std::swap(m_rxMemory, rhs.m_rxMemory);
+#endif
+#if defined(MEMFUNC_USE_WASM)
+	std::swap(m_wasmModule, rhs.m_wasmModule);
+#endif
+}
+
 CMemoryFunction::CMemoryFunction(const void* code, size_t size)
 : m_code(nullptr)
 , m_size(0)
@@ -255,7 +270,6 @@ void CMemoryFunction::Reset()
         if(m_ios26TxmMode)
         {
             m_rxMemory = nullptr;
-            m_rwAliasMemory = nullptr;
             m_code = nullptr;
             m_size = 0;
             return;
@@ -292,6 +306,10 @@ CMemoryFunction& CMemoryFunction::operator =(CMemoryFunction&& rhs)
 	Reset();
 	std::swap(m_code, rhs.m_code);
 	std::swap(m_size, rhs.m_size);
+#ifdef __APPLE__
+	std::swap(m_ios26TxmMode, rhs.m_ios26TxmMode);
+	std::swap(m_rxMemory, rhs.m_rxMemory);
+#endif
 #if defined(MEMFUNC_USE_WASM)
 	std::swap(m_wasmModule, rhs.m_wasmModule);
 #endif
