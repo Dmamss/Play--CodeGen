@@ -99,6 +99,10 @@ CMemoryFunction::CMemoryFunction()
 CMemoryFunction::CMemoryFunction(CMemoryFunction&& rhs)
 : m_code(nullptr)
 , m_size(0)
+#ifdef __APPLE__
+, m_ios26TxmMode(false)
+, m_rxMemory(nullptr)
+#endif
 {
 	std::swap(m_code, rhs.m_code);
 	std::swap(m_size, rhs.m_size);
